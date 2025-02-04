@@ -1,2 +1,100 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+;
+; Lab1.asm
+;
+; Created: 3/02/2025 08:32:52
+; Author : ianfa
+;
+
+.INCLUDE "m328Pdef.inc"
+
+.CSEG
+.ORG 0x00
+
+    ; Configurar PORTD como entrada para botones
+    LDI R16, 0x00
+    OUT DDRD, R16
+    ; Habilitar pull-ups
+    LDI R16, 0x7C
+    OUT PORTD, R16
+
+    ; Configurar PORTB como salida para A (D8-D11)
+    LDI R16, 0x0F
+    OUT DDRB, R16
+
+    ; Configurar PORTC como salida para B, suma y acarreo (A0-A4)
+    LDI R16, 0x1F
+    OUT DDRC, R16
+
+    CLR R17  ; Registro para A 
+    CLR R18  ; Registro para B 
+    CLR R19  ; Registro para la suma 
+    CLR R20  ; Registro para el acarreo 
+
+LOOP:
+    ; Leer botones para ajustar A y B
+    SBIS PIND, 2    ; Incrementar A si PD2 está presionado
+    RCALL INC_A
+    SBIS PIND, 3    ; Decrementar A si PD3 está presionado
+    RCALL DEC_A
+    SBIS PIND, 4    ; Incrementar B si PD4 está presionado
+    RCALL INC_B
+    SBIS PIND, 5    ; Decrementar B si PD5 está presionado
+    RCALL DEC_B
+
+    ; Mostrar A en PORTB (D8-D11)
+    OUT PORTB, R17
+
+    ; Mostrar B en PORTC (A0-A3)
+    OUT PORTC, R18
+
+    ; Verificar botón de resultado (PD6)
+    SBIC PIND, 6    ; Si PD6 está presionado, mostrar suma
+    RJMP LOOP       ; Si no, continuar
+
+    ; Calcular suma y acarreo
+    CLR R19
+    CLR R20
+    ADD R19, R17
+    ADD R19, R18
+
+    CPI R19, 16     ; Verificar si la suma >= 16
+    BRLO NO_CARRY
+    LDI R20, 1      ; Activar acarreo
+    ANDI R19, 0x0F  ; Limpiar bits superiores
+
+NO_CARRY:
+    ; Mostrar suma en y acarreo en
+    MOV R21, R19
+    SBRS R20, 0     ; Verificar si hay acarreo
+    RJMP SHOW
+    ORI R21, 0x10   ; Encender bit 4 
+
+SHOW:
+    OUT PORTC, R21  ; Actualizar LEDs
+    RJMP LOOP
+
+; Subrutinas para ajustar A y B
+INC_A:
+    CPI R17, 15
+    BRGE RETURN
+    INC R17
+    RET
+
+DEC_A:
+    CPI R17, 0
+    BREQ RETURN
+    DEC R17
+    RET
+
+INC_B:
+    CPI R18, 15
+    BRGE RETURN
+    INC R18
+    RET
+
+DEC_B:
+    CPI R18, 0
+    BREQ RETURN
+    DEC R18
+RETURN:
+    RET
