@@ -10,91 +10,147 @@
 .CSEG
 .ORG 0x00
 
-    ; Configurar PORTD como entrada para botones
+    ; Configurar PORTD (PD2-PD6) como entrada con pull-ups
     LDI R16, 0x00
     OUT DDRD, R16
-    ; Habilitar pull-ups
-    LDI R16, 0x7C
+    LDI R16, 0x7C           ; Habilitar pull-ups en PD2-PD6
     OUT PORTD, R16
 
-    ; Configurar PORTB como salida para A (D8-D11)
+    ; Configurar PORTB (PB0-PB3) como salida para A
     LDI R16, 0x0F
     OUT DDRB, R16
 
-    ; Configurar PORTC como salida para B, suma y acarreo (A0-A4)
+    ; Configurar PORTC (PC0-PC4) como salida para B, suma y carry
     LDI R16, 0x1F
     OUT DDRC, R16
 
-    CLR R17  ; Registro para A 
-    CLR R18  ; Registro para B 
-    CLR R19  ; Registro para la suma 
-    CLR R20  ; Registro para el acarreo 
+    ; Inicializar registros
+    CLR R17                 ; A
+    CLR R18                 ; B
+    CLR R19                 ; Suma
+    CLR R20                 ; Carry
 
 LOOP:
-    ; Leer botones para ajustar A y B
-    SBIS PIND, 2    ; Incrementar A si PD2 está presionado
-    RCALL INC_A
-    SBIS PIND, 3    ; Decrementar A si PD3 está presionado
-    RCALL DEC_A
-    SBIS PIND, 4    ; Incrementar B si PD4 está presionado
-    RCALL INC_B
-    SBIS PIND, 5    ; Decrementar B si PD5 está presionado
-    RCALL DEC_B
+    ; Verificar botones y actualizar valores
+    SBIS PIND, 2            ; PD2 presionado?
+    RCALL DEBOUNCE_INC_A
 
-    ; Mostrar A en PORTB (D8-D11)
+    SBIS PIND, 3            ; PD3 presionado?
+    RCALL DEBOUNCE_DEC_A
+
+    SBIS PIND, 4            ; PD4 presionado?
+    RCALL DEBOUNCE_INC_B
+
+    SBIS PIND, 5            ; PD5 presionado?
+    RCALL DEBOUNCE_DEC_B
+
+    ; Mostrar A y B
     OUT PORTB, R17
-
-    ; Mostrar B en PORTC (A0-A3)
     OUT PORTC, R18
 
     ; Verificar botón de resultado (PD6)
-    SBIC PIND, 6    ; Si PD6 está presionado, mostrar suma
-    RJMP LOOP       ; Si no, continuar
+    SBIS PIND, 6
+    RJMP CALCULAR_SUMA
+    RJMP LOOP
 
-    ; Calcular suma y acarreo
+CALCULAR_SUMA:
+    ; Realizar suma y calcular carry
     CLR R19
-    CLR R20
     ADD R19, R17
     ADD R19, R18
 
-    CPI R19, 16     ; Verificar si la suma >= 16
+    CLR R20
+    CPI R19, 16
     BRLO NO_CARRY
-    LDI R20, 1      ; Activar acarreo
-    ANDI R19, 0x0F  ; Limpiar bits superiores
+    LDI R20, 0x10           ; Carry en PC4
+    ANDI R19, 0x0F
 
 NO_CARRY:
-    ; Mostrar suma en y acarreo en
+    ; Combinar suma y carry
     MOV R21, R19
-    SBRS R20, 0     ; Verificar si hay acarreo
-    RJMP SHOW
-    ORI R21, 0x10   ; Encender bit 4 
+    OR R21, R20
+    OUT PORTC, R21
 
-SHOW:
-    OUT PORTC, R21  ; Actualizar LEDs
+    ; Esperar liberación del botón de resultado
+WAIT_RELEASE_RESULT:
+    SBIC PIND, 6
+    RJMP WAIT_RELEASE_RESULT
     RJMP LOOP
 
-; Subrutinas para ajustar A y B
-INC_A:
+; Subrutinas de debounce y ajuste de valores
+DEBOUNCE_INC_A:
+    RCALL DELAY_20MS
+    SBIS PIND, 2            ; Verificar si sigue presionado
+    RET
     CPI R17, 15
-    BRGE RETURN
+    BRGE FIN_INC_A
     INC R17
-    RET
+FIN_INC_A:
+    RCALL ACTUALIZAR_DISPLAY
+    RJMP WAIT_RELEASE_INC_A
 
-DEC_A:
+WAIT_RELEASE_INC_A:
+    SBIC PIND, 2
+    RET
+    RJMP WAIT_RELEASE_INC_A
+
+DEBOUNCE_DEC_A:
+    RCALL DELAY_20MS
+    SBIS PIND, 3
+    RET
     CPI R17, 0
-    BREQ RETURN
+    BREQ FIN_DEC_A
     DEC R17
-    RET
+FIN_DEC_A:
+    RCALL ACTUALIZAR_DISPLAY
+    RJMP WAIT_RELEASE_DEC_A
 
-INC_B:
+WAIT_RELEASE_DEC_A:
+    SBIC PIND, 3
+    RET
+    RJMP WAIT_RELEASE_DEC_A
+
+DEBOUNCE_INC_B:
+    RCALL DELAY_20MS
+    SBIS PIND, 4
+    RET
     CPI R18, 15
-    BRGE RETURN
+    BRGE FIN_INC_B
     INC R18
+FIN_INC_B:
+    RCALL ACTUALIZAR_DISPLAY
+    RJMP WAIT_RELEASE_INC_B
+
+WAIT_RELEASE_INC_B:
+    SBIC PIND, 4
+    RET
+    RJMP WAIT_RELEASE_INC_B
+
+DEBOUNCE_DEC_B:
+    RCALL DELAY_20MS
+    SBIS PIND, 5
+    RET
+    CPI R18, 0
+    BREQ FIN_DEC_B
+    DEC R18
+FIN_DEC_B:
+    RCALL ACTUALIZAR_DISPLAY
+    RJMP WAIT_RELEASE_DEC_B
+
+WAIT_RELEASE_DEC_B:
+    SBIC PIND, 5
+    RET
+    RJMP WAIT_RELEASE_DEC_B
+
+ACTUALIZAR_DISPLAY:
+    OUT PORTB, R17
+    OUT PORTC, R18
     RET
 
-DEC_B:
-    CPI R18, 0
-    BREQ RETURN
-    DEC R18
-RETURN:
+DELAY_20MS:
+    LDI R24, 255
+    LDI R25, 255
+DELAY_LOOP:
+    SBIW R25:R24, 1
+    BRNE DELAY_LOOP
     RET
